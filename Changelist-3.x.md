@@ -1,3 +1,44 @@
+# v3.0.23 20260914
+## en
+
+### Added
+- feat: add WebSocket protocol and WebSocket server demo
+- feat: add communicator signal-ignore support and define separate server/client SIGINT ownership
+- feat: add AppCache clear and normal locator-key handling
+
+### Changed
+- change: improve stress demo client with asynchronous requests and updated server configuration
+- change: update third-party dependency sources and compiler/build configuration compatibility
+- change: update Windows and macOS support, including HTTP server creation and file APIs
+
+### Fixed
+- fix: avoid communicator and epoll lifecycle races that could cause deadlocks or crashes
+- fix: make consistent-hash snapshot reads unambiguous and remove coroutine race conditions
+- fix: fix HTTP HEAD responses with content length but no body
+- fix: fix file scanning, hidden-file removal, and directory handling across platforms
+- fix: fix MySQL client compilation and static-library usage on Windows and newer GCC versions
+- fix: address tc_thread_pool, tc_timer, tc_http, tc_socket, and generated parser/tooling issues
+
+## cn
+
+### 新增
+- feat: 新增 WebSocket 协议及 WebSocket 服务端示例
+- feat: 通信器增加信号忽略支持，明确服务端和客户端的 SIGINT 归属
+- feat: AppCache 增加清理及普通 locator key 处理能力
+
+### 变更
+- change: 更新压力测试客户端异步请求能力及服务端配置
+- change: 更新第三方依赖来源及编译、构建兼容性配置
+- change: 完善 Windows、macOS 支持，包括 HTTP 服务创建和文件 API
+
+### 修复
+- fix: 修复通信器和 epoll 生命周期竞态导致的死锁或崩溃问题
+- fix: 修复一致性 Hash 快照读取语义及协程竞态问题
+- fix: 修复 HTTP HEAD 响应声明 content length 但没有 body 时的超时问题
+- fix: 修复跨平台文件扫描、隐藏文件删除和目录处理问题
+- fix: 修复 Windows 及新版 GCC 下 MySQL 客户端编译和静态库使用问题
+- fix: 修复 tc_thread_pool、tc_timer、tc_http、tc_socket 及生成解析工具相关问题
+
 # v3.0.22 20251028
 ## en
 - feat: tars2node support include
