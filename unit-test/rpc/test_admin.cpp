@@ -82,7 +82,7 @@ TEST_F(HelloTest, testAdmin)
 	EXPECT_STREQ(errorcmd.c_str(), "");
 
 	string normalcmd = adminFPrx->notify("AdminCmdNormalTest returnMark");
-	EXPECT_STREQ(normalcmd.c_str(), "[notify servant object num:1]\n[1]:return Mark AdminCmdNormalTest success!\n");
+	EXPECT_STREQ(normalcmd.c_str(), "[notify servant object num:1]\n[1]:returnMark AdminCmdNormalTest success!\n");
 
 	string normaldeletecmd = adminFPrx->notify("DeletePrefixCmd");
 	EXPECT_STREQ(normaldeletecmd.c_str(), "[notify servant object num:1]\n[1]:Delete success!\n");
