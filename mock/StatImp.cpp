@@ -2,6 +2,7 @@
 
 #include "StatImp.h"
 #include "FrameworkServer.h"
+#include "StatData.h"
 
 ///////////////////////////////////////////////////////////
 //
@@ -11,11 +12,11 @@ int StatImp::reportMicMsg( const map<tars::StatMicMsgHead, tars::StatMicMsgBody>
 
     if(bFromClient)
 	{
-		_clientStatData.push_back(statmsg);
+		appendClientStatData(statmsg);
 	}
     else
 	{
-		_serverStatData.push_back(statmsg);
+		appendServerStatData(statmsg);
 	}
 
     return 0;

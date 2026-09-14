@@ -24,6 +24,8 @@ static const int MAX_BUFFER_SIZE = 10 * 1024;
 
 TC_SerialPortGroup::~TC_SerialPortGroup()
 {
+	terminate();
+
 #if TARGET_PLATFORM_WINDOWS
 	if(_ioPort != INVALID_HANDLE_VALUE)
 	{
@@ -31,7 +33,6 @@ TC_SerialPortGroup::~TC_SerialPortGroup()
 		_ioPort = INVALID_HANDLE_VALUE;
 	}
 #endif
-	_tpool.stop();
 }
 void TC_SerialPortGroup::initialize()
 {

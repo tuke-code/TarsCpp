@@ -3,6 +3,7 @@
 #include "mock/ConfigImp.h"
 #include "mock/QueryImp.h"
 #include "mock/StatImp.h"
+#include "mock/StatData.h"
 #include "mock/LogImp.h"
 #include "mock/framework.h"
 
@@ -10,6 +11,35 @@ using namespace std;
 
 vector<map<tars::StatMicMsgHead, tars::StatMicMsgBody>> _clientStatData;
 vector<map<tars::StatMicMsgHead, tars::StatMicMsgBody>> _serverStatData;
+
+namespace
+{
+std::mutex g_statDataMutex;
+}
+
+void appendClientStatData(const StatData &data)
+{
+    std::lock_guard<std::mutex> lock(g_statDataMutex);
+    _clientStatData.push_back(data);
+}
+
+void appendServerStatData(const StatData &data)
+{
+    std::lock_guard<std::mutex> lock(g_statDataMutex);
+    _serverStatData.push_back(data);
+}
+
+void clearClientStatData()
+{
+    std::lock_guard<std::mutex> lock(g_statDataMutex);
+    _clientStatData.clear();
+}
+
+StatDataList getClientStatData()
+{
+    std::lock_guard<std::mutex> lock(g_statDataMutex);
+    return _clientStatData;
+}
 
 FrameworkServer::~FrameworkServer()
 {

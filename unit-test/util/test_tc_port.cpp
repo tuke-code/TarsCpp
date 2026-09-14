@@ -51,7 +51,8 @@ TEST_F(UtilPortTest, testGetPidStartTime)
     int64_t t = TC_Port::getPidStartTime(TC_Port::getpid());
     cout << "testGetPidStartTime:" << t << endl;
 
-    ASSERT_TRUE(t >= time(NULL));
+    ASSERT_GT(t, 0);
+    ASSERT_LE(t, time(NULL));
 }
 
 TEST_F(UtilPortTest, testGetUPTime)
@@ -152,4 +153,3 @@ TEST_F(UtilPortTest, testGetPidsByCmdline)
 
     ASSERT_TRUE(std::find(pids.begin(), pids.end(), pid) != pids.end());
 }
-

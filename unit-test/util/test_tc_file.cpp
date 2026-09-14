@@ -174,25 +174,26 @@ TEST_F(UtilFileTest, scanDir_default)
 
 TEST_F(UtilFileTest, scanDir_ignoreHide_false)
 {
+	const string dir = "test_scanDir_ignoreHide_false";
+	TC_File::removeFile(dir, true);
+	ASSERT_TRUE(TC_File::makeDir(dir));
+	TC_File::save2file(dir + FILE_SEP + "normal.txt", "content");
+	TC_File::save2file(dir + FILE_SEP + ".hidden.txt", "hidden");
+
 	vector<string> files;
-	size_t count = TC_File::scanDir(".", files, NULL, 0, false);
+	size_t count = TC_File::scanDir(dir, files, NULL, 0, false);
 
-	ASSERT_TRUE(count > 0);
-	ASSERT_TRUE(count == files.size());
+	ASSERT_EQ(count, 2);
+	ASSERT_EQ(count, files.size());
 
-	bool hasDot = false;
-	bool hasDotDot = false;
+	bool hasNormal = false;
 	bool hasHidden = false;
 
 	for (size_t i = 0; i < files.size(); ++i)
 	{
-		if (files[i] == ".")
+		if (files[i] == "normal.txt")
 		{
-			hasDot = true;
-		}
-		if (files[i] == "..")
-		{
-			hasDotDot = true;
+			hasNormal = true;
 		}
 		if (files[i].at(0) == '.' && files[i] != "." && files[i] != "..")
 		{
@@ -200,8 +201,10 @@ TEST_F(UtilFileTest, scanDir_ignoreHide_false)
 		}
 	}
 
-	ASSERT_TRUE(hasDot);
-	ASSERT_TRUE(hasDotDot);
+	ASSERT_TRUE(hasNormal);
+	ASSERT_TRUE(hasHidden);
+
+	TC_File::removeFile(dir, true);
 }
 
 TEST_F(UtilFileTest, scanDir_maxSize)
@@ -240,6 +243,12 @@ TEST_F(UtilFileTest, scanDir_callback)
 
 TEST_F(UtilFileTest, scanDir_callback_with_ignoreHide)
 {
+	const string dir = "test_scanDir_callback_ignoreHide";
+	TC_File::removeFile(dir, true);
+	ASSERT_TRUE(TC_File::makeDir(dir));
+	TC_File::save2file(dir + FILE_SEP + "normal.txt", "content");
+	TC_File::save2file(dir + FILE_SEP + ".hidden.txt", "hidden");
+
 	vector<string> files;
 
 	auto selectAll = [](const struct dirent* ent) -> int {
@@ -247,11 +256,14 @@ TEST_F(UtilFileTest, scanDir_callback_with_ignoreHide)
 		return 1;
 	};
 
-	size_t count1 = TC_File::scanDir(".", files, selectAll, 0, true);
-	size_t count2 = TC_File::scanDir(".", files, selectAll, 0, false);
+	size_t count1 = TC_File::scanDir(dir, files, selectAll, 0, true);
+	size_t count2 = TC_File::scanDir(dir, files, selectAll, 0, false);
 
-	ASSERT_TRUE(count2 > count1);
-	ASSERT_TRUE(count2 == files.size());
+	ASSERT_EQ(count1, 1);
+	ASSERT_EQ(count2, 2);
+	ASSERT_EQ(count2, files.size());
+
+	TC_File::removeFile(dir, true);
 }
 
 TEST_F(UtilFileTest, scanDir_sorted)

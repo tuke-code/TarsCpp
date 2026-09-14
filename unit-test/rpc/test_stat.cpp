@@ -1,117 +1,119 @@
-﻿
 #include "hello_test.h"
+#include "mock/StatData.h"
 #include "mock/TarsMockUtil.h"
 
-int getStatCount(const vector<map<tars::StatMicMsgHead, tars::StatMicMsgBody>> &data)
+int getStatCount(const StatDataList &data, const string &interfaceName = "")
 {
-	LOG_CONSOLE_DEBUG << "client stat:" << data.size() << endl;
+    int sum = 0;
 
-	int sum = 0;
+    for (const StatData &report : data)
+    {
+        for (const auto &entry : report)
+        {
+            if (!interfaceName.empty() && entry.first.interfaceName != interfaceName)
+            {
+                continue;
+            }
 
-	for_each(data.begin(), data.end(), [&](const map<tars::StatMicMsgHead, tars::StatMicMsgBody> &r){
-		for(auto e : r)
-		{
-//			LOG_CONSOLE_DEBUG << e.first.writeToJsonString() << ", " << e.second.writeToJsonString() << endl;
-			sum += e.second.count ;
-		}
-	});
+            sum += entry.second.count;
+        }
+    }
 
-	return sum;
+    return sum;
+}
+
+int getClientTestHelloCount()
+{
+    return getStatCount(getClientStatData(), "testHello");
+}
+
+int waitForClientTestHelloCount(int expected, int baseline, int timeoutMs = 20000)
+{
+    const int64_t begin = TNOWMS;
+    int current = 0;
+    while (TNOWMS - begin < timeoutMs)
+    {
+        current = getClientTestHelloCount() - baseline;
+        if (current >= expected)
+        {
+            return current;
+        }
+
+        const auto &scheduler = TC_CoroutineScheduler::scheduler();
+        if (scheduler)
+        {
+            scheduler->sleep(100);
+        }
+        else
+        {
+            TC_Common::msleep(100);
+        }
+    }
+
+    return current;
+}
+
+static void verifyStatReport(const HelloPrx &prx, const string &buffer)
+{
+    const int reportPerRound = 20;
+    const int roundCount = 3;
+    const int expectedTotal = reportPerRound * roundCount;
+
+    clearClientStatData();
+    int statBaseline = getClientTestHelloCount();
+
+    int totalReport = 0;
+    for (int round = 0; round < roundCount; ++round)
+    {
+        for (int i = 0; i < reportPerRound; ++i)
+        {
+            string result;
+            prx->testHello(i, buffer, result);
+        }
+        totalReport += reportPerRound;
+
+        int totalRealReport = waitForClientTestHelloCount(totalReport, statBaseline);
+        LOG_CONSOLE_DEBUG << "report:" << reportPerRound
+                          << ", totalReport:" << totalReport
+                          << ", totalRealReport:" << totalRealReport << endl;
+
+        ASSERT_GE(totalRealReport, totalReport);
+        ASSERT_LE(totalRealReport - totalReport, 20);
+    }
+
+    ASSERT_GE(totalReport, expectedTotal);
 }
 
 TEST_F(HelloTest, statReport)
 {
     TarsMockUtil tarsMockUtil;
     tarsMockUtil.startFramework();
-//	FrameworkServer fs;
-//	startServer(fs, FRAMEWORK_CONFIG());
 
-	HelloServer hs;
-	startServer(hs, CONFIG());
+    HelloServer hs;
+    startServer(hs, CONFIG());
 
-	_clientStatData.clear();
+    shared_ptr<Communicator> c = getCommunicator();
+    HelloPrx prx = getObj<HelloPrx>(c.get(), "HelloAdapter");
+    verifyStatReport(prx, _buffer);
 
-	shared_ptr<Communicator> c = getCommunicator();
-
-	int totalReport = 0;
-	int totalRealReport = 0;
-	int count = 3;
-	while(count-->0)
-	{
-		int report = rand() % 100;
-		if(report == 0)
-		{
-			continue;
-		}
-
-		checkStat(c.get(), report);
-
-		TC_Common::sleep(1);
-
-		totalReport += report;
-
-		totalRealReport = getStatCount(_clientStatData);
-
-		LOG_CONSOLE_DEBUG << "report:" << report << ", totalReport:" << totalReport << ", totalRealReport:" << totalRealReport << ", " << _clientStatData.size()<< endl;
-
-		ASSERT_TRUE(totalReport >= totalRealReport);
-
-		ASSERT_TRUE(totalReport - totalRealReport <= 20);
-
-	}
-
-//	LOG_CONSOLE_DEBUG << "client stat:" << _clientStatData.size() << endl;
-//	LOG_CONSOLE_DEBUG << "server stat:" << _serverStatData.size() << endl;
-
-	stopServer(hs);
+    stopServer(hs);
     tarsMockUtil.stopFramework();
-//	stopServer(fs);
 }
-
 
 TEST_F(HelloTest, statReportInCoroutine)
 {
     TarsMockUtil tarsMockUtil;
     tarsMockUtil.startFramework();
 
-	HelloServer hs;
-	startServer(hs, CONFIG());
+    HelloServer hs;
+    startServer(hs, CONFIG());
 
-	_clientStatData.clear();
+    shared_ptr<Communicator> c = getCommunicator();
+    funcInCoroutine([=]() {
+        HelloPrx prx = getObj<HelloPrx>(c.get(), "HelloAdapter");
+        verifyStatReport(prx, _buffer);
+    }, true);
 
-	shared_ptr<Communicator> c = getCommunicator();
-
-	funcInCoroutine([=]()
-	{
-		int totalReport = 0;
-		int totalRealReport = 0;
-		int count = 3;
-		while (count-- > 0)
-		{
-			int report = rand() % 100;
-			if (report == 0)
-			{
-				continue;
-			}
-
-			checkStat(c.get(), report);
-
-			TC_Common::sleep(1);
-
-			totalReport += report;
-
-			totalRealReport = getStatCount(_clientStatData);
-
-			LOG_CONSOLE_DEBUG << "report:" << report << ", totalReport:" << totalReport << ", totalRealReport:"
-							  << totalRealReport << ", data size:" << _clientStatData.size() << endl;
-
-			ASSERT_TRUE(totalReport >= totalRealReport);
-
-			ASSERT_TRUE(totalReport - totalRealReport <= 20);
-
-		}
-	}, true);
-
-	stopServer(hs);
+    stopServer(hs);
     tarsMockUtil.stopFramework();
 }
