@@ -266,6 +266,13 @@ private:
     void finishInvoke(ReqMessage * msg);
 
     /**
+     * 连接关闭时处理该连接上的挂起请求。
+     */
+    void failPendingRequests(bool retryUnsent);
+
+    void failRequest(ReqMessage *msg);
+
+    /**
      * 超时统计处理
      */
     void finishInvoke(bool bTimeout);
@@ -338,6 +345,11 @@ private:
     ReqMessage*                             _requestMsg = NULL;
 
     /**
+     * 当前正在调用 transceiver 发送的请求，连接关闭回调可能在发送过程中重入。
+     */
+    ReqMessage*                             _sendMsg = NULL;
+
+    /**
      * ep
      */ 
     EndpointInfo                            _ep;
@@ -346,6 +358,11 @@ private:
      * 收发包处理
      */
     std::unique_ptr<TC_Transceiver>         _trans;
+
+    /**
+     * 是否是 ServantProxy 主动关闭，主动关闭时不应重新发送未发送请求。
+     */
+    bool                                    _forceClose = false;
 
     /*
      * 超时队列

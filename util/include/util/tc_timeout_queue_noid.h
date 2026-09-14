@@ -17,6 +17,7 @@
 
 #include <map>
 #include <list>
+#include <vector>
 #include <iostream>
 #include <cassert>
 #include "util/tc_platform.h"
@@ -98,6 +99,12 @@ public:
      * @return true  成功 false 失败
      */
     bool push(T& ptr, uint64_t timeout);
+
+    /**
+     * 提取满足条件的数据，保留其他数据及其超时时间。
+     */
+    template<typename Predicate>
+    void extractIf(Predicate predicate, vector<T> &result);
 
     /**
      * @brief 超时删除数据
@@ -182,6 +189,22 @@ template<typename T> bool TC_TimeoutQueueNoID<T>::push(T& ptr, uint64_t timeout)
     pinfo.timeIter = _time.insert(make_pair(timeout,stNodeInfo));
 
     return true;
+}
+
+template<typename T>
+template<typename Predicate>
+void TC_TimeoutQueueNoID<T>::extractIf(Predicate predicate, vector<T> &result)
+{
+    for (auto it = _list.begin(); it != _list.end();)
+    {
+        auto current = it++;
+        if (predicate(current->ptr))
+        {
+            result.push_back(current->ptr);
+            _time.erase(current->timeIter);
+            _list.erase(current);
+        }
+    }
 }
 
 template<typename T> void TC_TimeoutQueueNoID<T>::timeout()

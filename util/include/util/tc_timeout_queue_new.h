@@ -20,6 +20,7 @@
 #include <functional>
 #include <unordered_map>
 #include <iostream>
+#include <vector>
 #include <cassert>
 #include "util/tc_platform.h"
 #include "util/tc_autoptr.h"
@@ -69,6 +70,12 @@ public:
     struct SendInfo
     {
         typename data_type::iterator dataIter;
+    };
+
+    struct PendingInfo
+    {
+        T ptr;
+        bool hasSend;
     };
     /**
 	 * @brief 超时队列
@@ -152,6 +159,12 @@ public:
 	 * @brief 删除超时的数据，并用df对数据做处理
      */
     void timeout(data_functor &df);
+
+    /**
+     * 提取队列中的全部数据，并返回请求是否已经交给发送流程.
+     * 该队列只在网络线程中使用，因此不需要加锁.
+     */
+    void drain(vector<PendingInfo> &pending);
 
     /**
      * @brief 队列中的数据.
@@ -314,6 +327,36 @@ template<typename T> void TC_TimeoutQueueNew<T>::timeout(data_functor &df)
 
         try { df(ptr); } catch(...) { }
     }
+}
+
+template<typename T> void TC_TimeoutQueueNew<T>::drain(vector<typename TC_TimeoutQueueNew<T>::PendingInfo> &pending)
+{
+    pending.reserve(pending.size() + _data.size());
+
+    // _send 的 back 是下一个要发送的请求，按发送顺序提取未发送请求。
+    for (auto it = _send.rbegin(); it != _send.rend(); ++it)
+    {
+        PendingInfo info;
+        info.ptr = it->dataIter->second.ptr;
+        info.hasSend = false;
+        pending.push_back(info);
+    }
+
+    // 已发送请求不在 _send 中，顺序对并行调用没有意义。
+    for (auto it = _data.begin(); it != _data.end(); ++it)
+    {
+        if (it->second.hasSend)
+        {
+            PendingInfo info;
+            info.ptr = it->second.ptr;
+            info.hasSend = true;
+            pending.push_back(info);
+        }
+    }
+
+    _send.clear();
+    _time.clear();
+    _data.clear();
 }
 
 template<typename T> bool TC_TimeoutQueueNew<T>::erase(uint32_t uniqId, T & t)

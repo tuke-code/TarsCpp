@@ -216,6 +216,15 @@ protected:
 	 */
 	void doInvokeException(ReqMessage * msg);
 
+    /**
+     * 连接关闭后，重新选择 endpoint 发送尚未发送的请求。
+     */
+    void retryRequest(ReqMessage *msg, AdapterProxy *failedAdapter = NULL);
+
+    void retryPendingRequests(AdapterProxy *failedAdapter);
+
+    void failPendingRequests();
+
     void prepareConnection(AdapterProxy *adapterProxy);
 
     friend class AdapterProxy;

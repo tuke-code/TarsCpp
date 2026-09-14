@@ -200,6 +200,77 @@ void ObjectProxy::onConnect(AdapterProxy *adapterProxy)
     prepareConnection(adapterProxy);
 }
 
+void ObjectProxy::retryRequest(ReqMessage *msg, AdapterProxy *failedAdapter)
+{
+    assert(this->getCommunicatorEpoll()->getThreadId() == this_thread::get_id());
+
+    msg->adapter = NULL;
+
+    AdapterProxy *adapterProxy = NULL;
+    bool bFirst = _endpointManger->selectAdapterProxy(msg, adapterProxy);
+
+    if (bFirst)
+    {
+        _reqTimeoutQueue.push(msg, msg->request.iTimeout + msg->iBeginTime);
+        return;
+    }
+
+    if (!adapterProxy)
+    {
+        msg->response->iRet = TARSADAPTERNULL;
+        doInvokeException(msg);
+        return;
+    }
+
+    // There is no alternate endpoint. Do not reconnect to the same failed
+    // adapter and leave the request waiting until its RPC timeout expires.
+    if (adapterProxy == failedAdapter)
+    {
+        msg->response->iRet = TARSPROXYCONNECTERR;
+        msg->response->iRequestId = msg->request.iRequestId;
+        doInvokeException(msg);
+        return;
+    }
+
+    msg->adapter = adapterProxy;
+    if (!adapterProxy->trans()->hasConnected())
+    {
+        _reqTimeoutQueue.push(msg, msg->request.iTimeout + msg->iBeginTime);
+        return;
+    }
+
+    adapterProxy->invoke(msg);
+}
+
+void ObjectProxy::retryPendingRequests(AdapterProxy *failedAdapter)
+{
+    vector<ReqMessage *> pending;
+    _reqTimeoutQueue.extractIf([failedAdapter](ReqMessage *msg) {
+        return msg->adapter == failedAdapter;
+    }, pending);
+
+    for (ReqMessage *msg : pending)
+    {
+        retryRequest(msg, failedAdapter);
+    }
+}
+
+void ObjectProxy::failPendingRequests()
+{
+    vector<ReqMessage *> pending;
+    _reqTimeoutQueue.extractIf([](ReqMessage *) {
+        return true;
+    }, pending);
+
+    for (ReqMessage *msg : pending)
+    {
+        msg->eStatus = ReqMessage::REQ_EXC;
+        msg->response->iRet = TARSPROXYCONNECTERR;
+        msg->response->iRequestId = msg->request.iRequestId;
+        doInvokeException(msg);
+    }
+}
+
 void ObjectProxy::onNotifyEndpoints(const set<EndpointInfo> & active,const set<EndpointInfo> & inactive)
 {
 	if(this->getRootServantProxy()) {
@@ -410,6 +481,8 @@ void ObjectProxy::close()
             vAdapterProxy[iAdapter]->onClose();
         }
     }
+
+    failPendingRequests();
 }
 //////////////////////////////////////////////////////////////////////////////////
 }

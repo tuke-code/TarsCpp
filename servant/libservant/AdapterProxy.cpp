@@ -150,6 +150,22 @@ std::shared_ptr<TC_OpenSSL> AdapterProxy::onOpensslCallback(TC_Transceiver* tran
 
 void AdapterProxy::onCloseCallback(TC_Transceiver* trans, TC_Transceiver::CloseReason reason, const string &err)
 {
+	// 连接已经确定失效，避免重新选路时马上再次选择当前 endpoint。
+	if (!_forceClose)
+	{
+		_activeStatus = false;
+		_connExc = true;
+		++_connExcCnt;
+		resetRetryTime();
+	}
+
+	failPendingRequests(!_forceClose);
+
+	if (!_forceClose)
+	{
+		_objectProxy->retryPendingRequests(this);
+	}
+
     if(auto cb = _objectProxy->getRootServantProxy()->tars_get_push_callback())
     {
 		cb->onClose(trans->getConnectEndpoint());
@@ -168,6 +184,48 @@ void AdapterProxy::onCloseCallback(TC_Transceiver* trans, TC_Transceiver::CloseR
 
     _objectProxy->getCommunicatorEpoll()->reConnect(TNOWMS + millisecond, this);
     TLOGERROR("[trans close:" << _objectProxy->name() << "," << trans->getConnectEndpoint().toString() << ", reconnect:" << millisecond << " ms]" << endl);
+}
+
+void AdapterProxy::failRequest(ReqMessage *msg)
+{
+	msg->eStatus = ReqMessage::REQ_EXC;
+	msg->response->iRet = TARSPROXYCONNECTERR;
+	msg->response->iRequestId = msg->request.iRequestId;
+	finishInvoke(msg);
+}
+
+void AdapterProxy::failPendingRequests(bool retryUnsent)
+{
+	vector<TC_TimeoutQueueNew<ReqMessage *>::PendingInfo> pending;
+	_timeoutQueue->drain(pending);
+	_requestMsg = NULL;
+
+	// 先完成已经发送的请求，再重新选择 endpoint 处理尚未发送的请求。
+	for (const auto &info : pending)
+	{
+		if (info.ptr != _sendMsg && info.hasSend)
+		{
+			failRequest(info.ptr);
+		}
+	}
+
+	for (const auto &info : pending)
+	{
+		if (info.ptr == _sendMsg)
+		{
+			// sendRequest 可能在此处同步触发 onCloseCallback，发送完成后由调用方处理。
+			continue;
+		}
+
+		if (!info.hasSend && retryUnsent)
+		{
+			_objectProxy->retryRequest(info.ptr);
+		}
+		else if (!info.hasSend)
+		{
+			failRequest(info.ptr);
+		}
+	}
 }
 
 void AdapterProxy::onConnectCallback(TC_Transceiver* trans)
@@ -521,13 +579,20 @@ void AdapterProxy::doInvoke_serial()
 
     _timeoutQueue->getSend(msg);
 
+    _sendMsg = msg;
     int iRet = _trans->sendRequest(msg->sReqData);
+    _sendMsg = NULL;
 
     if(iRet == TC_Transceiver::eRetError)
     {
-        _requestMsg = NULL;
+        ReqMessage *queuedMsg = NULL;
+        _timeoutQueue->erase(msg->request.iRequestId, queuedMsg);
+        if (queuedMsg != NULL)
+        {
+            msg = queuedMsg;
+        }
 
-        _timeoutQueue->popSend(true);
+        _requestMsg = NULL;
 
         msg->response->iRet = TARSSENDREQUESTERR;
 
@@ -536,6 +601,14 @@ void AdapterProxy::doInvoke_serial()
         finishInvoke(msg);  
 
     }
+	else if (iRet == TC_Transceiver::eRetNotSend)
+	{
+		ReqMessage *queuedMsg = NULL;
+		if (!_timeoutQueue->get(msg->request.iRequestId, queuedMsg, false))
+		{
+			failRequest(msg);
+		}
+	}
     else if(iRet == TC_Transceiver::eRetOk || iRet == TC_Transceiver::eRetFull)
     {
         _requestMsg = msg;
@@ -552,18 +625,34 @@ void AdapterProxy::doInvoke_parallel()
 
 		_timeoutQueue->getSend(msg);
 
+		_sendMsg = msg;
 		int iRet = _trans->sendRequest(msg->sReqData);
+		_sendMsg = NULL;
 
 		//发送失败 or 没有发送
 		if (iRet == TC_Transceiver::eRetError)
 		{
 			TLOGTARS("[AdapterProxy::doInvoke_parallel sendRequest failed, obj:" << _objectProxy->name() << ",desc:" << _trans->getConnectionString() << ",id:" << msg->request.iRequestId << ", ret:" << iRet << endl);
+
+			ReqMessage *queuedMsg = NULL;
+			_timeoutQueue->erase(msg->request.iRequestId, queuedMsg);
+			if (queuedMsg != NULL)
+			{
+				msg = queuedMsg;
+			}
+			failRequest(msg);
 			return;
 		}
 
 		if (iRet == TC_Transceiver::eRetNotSend)
 		{
 			TLOGTARS("[AdapterProxy::doInvoke_parallel sendRequest not send, obj:" << _objectProxy->name() << ",desc:" << _trans->getConnectionString() << ",id:" << msg->request.iRequestId << ", ret:" << iRet << endl);
+
+			ReqMessage *queuedMsg = NULL;
+			if (!_timeoutQueue->get(msg->request.iRequestId, queuedMsg, false))
+			{
+				failRequest(msg);
+			}
 			return;
 		}
 
@@ -778,7 +867,11 @@ void AdapterProxy::onSetInactive()
 
 void AdapterProxy::onClose()
 {
+    _forceClose = true;
     _trans->close();
+    // 连接可能已经失效，此时 trans->close() 不会再次触发回调。
+    failPendingRequests(false);
+    _forceClose = false;
 }
 
 //屏蔽节点
